@@ -1,0 +1,130 @@
+import os
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.metrics import MeanSquaredError
+from tensorflow.keras.utils import to_categorical
+import matplotlib.pyplot as plt
+from sklearn.metrics import r2_score
+from tensorflow.keras.regularizers import l2
+
+# Paths for model weights and metrics log
+model_weights_path = '/home/francisco/trading-model/btc_price_model_weights.weights.h5'
+metrics_log_path = '/home/francisco/trading-model/data-logs/learning_metrics.log'
+
+# Step 1: Load and label the data for trend prediction
+df = pd.read_csv('/home/francisco/trading-model/cleaned_btc_data.csv')
+
+# Calculate the price change over each 4-hour period
+df['price_change'] = df['price_usd_normalized'].pct_change(periods=4)
+
+# Define thresholds for classifying trends
+def classify_trend(change):
+    if change > 0.005:
+        return 1  # Go Up
+    elif change < -0.005:
+        return 2  # Go Down
+    else:
+        return 0  # Consolidate
+
+# Apply classification function
+df['trend'] = df['price_change'].apply(classify_trend)
+
+# Check class distribution for imbalance
+df['trend'].value_counts().plot(kind='bar')
+plt.title('Class Distribution')
+plt.xlabel('Trend (0=Consolidate, 1=Go Up, 2=Go Down)')
+plt.ylabel('Frequency')
+plt.show()
+
+
+# One-hot encode the trend column for categorical cross-entropy loss
+df = pd.get_dummies(df, columns=['trend'])
+
+# Save processed data for future use
+df.to_csv('/home/francisco/trading-model/labeled_btc_data.csv', index=False)
+
+# Prepare features and labels
+X = df[['price_usd_normalized']].values
+y = df[['trend_0', 'trend_1', 'trend_2']].values  # One-hot encoded trend labels
+
+# Step 2: Split data into training and validation sets
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, shuffle=False)
+
+# Reshape input for LSTM
+X_train = np.reshape(X_train, (X_train.shape[0], 1, X_train.shape[1]))
+X_val = np.reshape(X_val, (X_val.shape[0], 1, X_val.shape[1]))
+
+# Step 3: Build the LSTM model for multi-class classification with additional LSTM layer and L2 regularization
+def build_model(input_shape):
+    model = Sequential()
+    # First LSTM layer with 50 units
+    model.add(LSTM(50, return_sequences=True, input_shape=input_shape))
+    model.add(Dropout(0.3))
+    # Second LSTM layer with 30 units
+    model.add(LSTM(30, return_sequences=False))
+    model.add(Dropout(0.3))
+    # Dense layer with L2 regularization and softmax activation for classification
+    model.add(Dense(3, activation='softmax', kernel_regularizer=l2(0.01)))  # L2 regularization added here
+    # Compile with categorical_crossentropy for multi-class classification
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    return model
+
+# Build the model
+input_shape = (X_train.shape[1], X_train.shape[2])
+model = build_model(input_shape)
+
+# Step 4: Load model weights if available
+if os.path.exists(model_weights_path):
+    print("Loading existing model weights...")
+    model.load_weights(model_weights_path)
+else:
+    print("No existing weights found. Training from scratch.")
+
+# Step 5: Set up ModelCheckpoint and EarlyStopping callbacks for improved training
+checkpoint_callback = ModelCheckpoint(filepath=model_weights_path, save_weights_only=True, save_best_only=True, verbose=1)
+early_stopping_callback = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True, verbose=1)
+
+# Training the model with the adjusted batch size and callbacks
+history = model.fit(
+    X_train, y_train,
+    epochs=100,  # Increased epochs for more training time
+    batch_size=16,  # Reduced batch size for finer learning
+    validation_data=(X_val, y_val),
+    verbose=2,
+    callbacks=[checkpoint_callback, early_stopping_callback]
+)
+
+# Step 6: Evaluate the model
+val_loss, val_accuracy = model.evaluate(X_val, y_val)
+print(f"Validation Loss: {val_loss}")
+print(f"Validation Accuracy: {val_accuracy}")
+
+# Step 7: Make Predictions on the validation set
+y_pred = model.predict(X_val)
+
+# Step 8: Plot the Loss During Training
+plt.plot(history.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Loss Over Epochs')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+
+# Step 9: Visualize Predictions vs Actual Values
+pred_classes = np.argmax(y_pred, axis=1)
+actual_classes = np.argmax(y_val, axis=1)
+plt.plot(actual_classes, label='Actual Trend')
+plt.plot(pred_classes, label='Predicted Trend')
+plt.title('Actual vs Predicted Trends')
+plt.legend()
+plt.show()
+
+# Step 10: Log Metrics (Validation Loss, Validation Accuracy) for Continuous Learning
+with open(metrics_log_path, 'a') as log_file:
+    log_file.write(f"Validation Loss: {val_loss}, Validation Accuracy: {val_accuracy}\n")
