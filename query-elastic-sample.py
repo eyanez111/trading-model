@@ -1,7 +1,7 @@
 from elasticsearch import Elasticsearch
 
 # Connect to Elasticsearch
-es = Elasticsearch([{'host': '88.99.147.210', 'port': 9200, 'scheme': 'http'}])
+es = Elasticsearch([{'host': '127.0.0.1', 'port': 9200, 'scheme': 'http'}])
 
 # Function to retrieve and display recent data from a specified index
 def check_volume_data(index_name, num_records=5):

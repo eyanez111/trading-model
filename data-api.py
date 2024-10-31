@@ -69,7 +69,7 @@ def fetch_real_time_data():
     return None, None, None
 
 # Connect to Elasticsearch
-es = Elasticsearch([{'host': '88.99.147.210', 'port': 9200, 'scheme': 'http'}])
+es = Elasticsearch([{'host': '127.0.0.1', 'port': 9200, 'scheme': 'http'}])
 
 # Step 1: Fetch extended historical data for a specified range (e.g., last year)
 start_date = datetime.now() - timedelta(days=365)  # Fetch data starting from one year ago
@@ -116,4 +116,4 @@ while True:
         print(f"Real-time data indexed successfully for {timestamp}: {res['result']}")
     
     # Wait for 100 seconds before fetching real-time data again
-    time.sleep(100)
+    time.sleep(130)

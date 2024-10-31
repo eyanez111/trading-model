@@ -1,7 +1,7 @@
 # Sample code to check count of documents and consistency in timestamps
 from elasticsearch import Elasticsearch
 
-es = Elasticsearch([{'host': '88.99.147.210', 'port': 9200, 'scheme': 'http'}])
+es = Elasticsearch([{'host': '127.0.0.1', 'port': 9200, 'scheme': 'http'}])
 
 # Count documents in each index
 for index_name in ["coingecko_btc_data", "coingecko_btc_data_historical"]:

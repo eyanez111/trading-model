@@ -3,7 +3,7 @@ import pandas as pd
 from elasticsearch import Elasticsearch
 
 # Connect to Elasticsearch
-es = Elasticsearch([{'host': '88.99.147.210', 'port': 9200, 'scheme': 'http'}])
+es = Elasticsearch([{'host': '127.0.0.1', 'port': 9200, 'scheme': 'http'}])
 
 # Parameters
 index_name = "coingecko_btc_data_historical"
