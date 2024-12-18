@@ -12,12 +12,12 @@ output_csv = "/home/francisco/trading-model/cleaned_data.csv"
 # Step 1: Fetch Data from Elasticsearch
 def fetch_data(index_name):
     query = {
-        "size": 10000,
+        "size": 1000,  # Fetch data in batches of 1000
         "_source": ["timestamp", "price_usd", "total_volume_usd"],
         "query": {
             "range": {
                 "timestamp": {
-                    "gte": "now-30d/d",   # Fetch data from the last 30 days
+                    "gte": "now-4M/d",   # Last 4 months
                     "lt": "now/d"
                 }
             }
@@ -25,13 +25,26 @@ def fetch_data(index_name):
         "sort": [{"timestamp": {"order": "asc"}}]
     }
     
-    response = es.search(index=index_name, body=query)
-    data = [
-        (hit["_source"]["timestamp"], hit["_source"].get("price_usd"), hit["_source"].get("total_volume_usd"))
-        for hit in response["hits"]["hits"]
-    ]
+    data = []
+    current_page = 0
     
+    while True:
+        query["from"] = current_page * 1000  # Pagination logic
+        response = es.search(index=index_name, body=query)
+        hits = response["hits"]["hits"]
+        
+        if not hits:  # Exit loop if no more data
+            break
+        
+        data.extend(
+            (hit["_source"]["timestamp"], hit["_source"].get("price_usd"), hit["_source"].get("total_volume_usd"))
+            for hit in hits
+        )
+        
+        current_page += 1  # Move to the next page
+        
     return pd.DataFrame(data, columns=["timestamp", "price_usd", "total_volume_usd"])
+
 
 # Step 2: Clean the Data
 def clean_data(df):
@@ -55,8 +68,17 @@ def clean_data(df):
 data_df = fetch_data(index_name)
 
 if not data_df.empty:
+    # Convert timestamp to datetime for sorting and consistency
+    data_df['timestamp'] = pd.to_datetime(data_df['timestamp'], errors='coerce', utc=True)
+    data_df = data_df.sort_values(by='timestamp')
+    
+    # Clean the data
     cleaned_df = clean_data(data_df)
     cleaned_df.to_csv(output_csv, index=False)
     print(f"Cleaned data saved to {output_csv}")
 else:
     print("No data found for the specified range.")
+
+# Step 4: Debugging and Data Preview
+print(data_df.head())
+print(f"Fetched {len(data_df)} rows from Elasticsearch.")
